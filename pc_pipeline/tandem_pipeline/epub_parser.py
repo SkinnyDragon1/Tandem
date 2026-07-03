@@ -83,11 +83,14 @@ def _book_meta(book: epub.EpubBook, source: Path) -> BookMeta:
         vals = book.get_metadata("DC", name)
         return vals[0][0].strip() if vals and vals[0][0] else default
 
-    lang = first("language", "en") or "en"
+    # Normalize to a 2-letter code (ISO 639-1); v1 targets English.
+    lang3to1 = {"eng": "en"}
+    lang = (first("language", "en") or "en").split("-")[0].lower()
+    lang = lang3to1.get(lang, lang[:2])
     return BookMeta(
         title=first("title", source.stem),
         author=first("creator", "Unknown"),
-        language=lang.split("-")[0].lower(),
+        language=lang,
         source_epub=source.name,
     )
 
