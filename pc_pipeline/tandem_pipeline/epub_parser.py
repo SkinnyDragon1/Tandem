@@ -25,15 +25,23 @@ from ebooklib import epub  # noqa: E402
 
 from .models import BookMeta, ChapterSpan, ParsedBook, Sentence
 
-_WS = re.compile(r"[ \t ]+")
-_MULTINL = re.compile(r"\n{2,}")
+_WS = re.compile(r"\s+")
+# Sentinel (private-use char) marking a real block boundary. It survives
+# whitespace collapsing so true block breaks can be told apart from source
+# line-wrap newlines inside a block.
+_BLOCK_MARK = ""
 
 
 def _clean_text(raw: str) -> str:
-    """Collapse whitespace while keeping paragraph breaks as single newlines."""
-    lines = [_WS.sub(" ", ln).strip() for ln in raw.splitlines()]
-    text = "\n".join(ln for ln in lines if ln)
-    return _MULTINL.sub("\n", text).strip()
+    """Collapse whitespace while keeping block boundaries as single newlines.
+
+    All whitespace *within* a block (including source line-wrap newlines) is
+    collapsed to single spaces; only the block-boundary sentinel becomes a
+    newline. This stops the sentence splitter from treating mid-sentence line
+    wraps as sentence boundaries, while still separating real paragraphs.
+    """
+    lines = [_WS.sub(" ", block).strip() for block in raw.split(_BLOCK_MARK)]
+    return "\n".join(ln for ln in lines if ln)
 
 
 def _html_to_text(html_bytes: bytes) -> str:
@@ -41,9 +49,11 @@ def _html_to_text(html_bytes: bytes) -> str:
     for tag in soup(["script", "style", "sup", "sub"]):
         tag.decompose()
     # Block elements should force line breaks so sentences don't run together.
-    # (<br> is a soft in-sentence break, so it is intentionally excluded.)
+    # A sentinel (not a literal newline) marks the boundary, so intra-block
+    # source newlines can be collapsed to spaces in _clean_text without losing
+    # real paragraph breaks. (<br> is a soft in-sentence break, so excluded.)
     for tag in soup.find_all(["p", "div", "li", "h1", "h2", "h3", "h4", "h5", "h6"]):
-        tag.append("\n")
+        tag.append(_BLOCK_MARK)
     return _clean_text(soup.get_text())
 
 

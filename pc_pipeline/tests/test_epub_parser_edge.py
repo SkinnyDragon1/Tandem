@@ -92,6 +92,33 @@ def test_multiple_paragraphs_across_blocks_split_on_block_boundaries(tmp_path):
     assert texts == ["First para here", "Second para here", "Third block"]
 
 
+def test_source_linewrap_newlines_do_not_split_a_sentence(tmp_path):
+    # Many publishers (e.g. Project Gutenberg) hard-wrap the source inside a
+    # block with literal newlines. Those mid-sentence newlines must NOT become
+    # sentence boundaries; the sentence should stay whole and only split on its
+    # terminal punctuation.
+    c = _chapter(
+        "c.xhtml",
+        "C",
+        "<p>\nIt is very seldom that mere ordinary people like John and myself\n"
+        "secure ancestral halls for the summer.\nA colonial mansion, a\n"
+        "hereditary estate, I would say a haunted house.\n</p>",
+    )
+    pb = parse_epub(_build_epub(tmp_path, [c]))
+    texts = [s.text for s in pb.sentences]
+    assert (
+        "It is very seldom that mere ordinary people like John and myself "
+        "secure ancestral halls for the summer." in texts
+    )
+    assert (
+        "A colonial mansion, a hereditary estate, I would say a haunted house."
+        in texts
+    )
+    # no fragment starts mid-sentence (i.e. every emitted sentence is whole)
+    assert not any(t.startswith("secure ancestral") for t in texts)
+    assert not any(t.startswith("hereditary estate") for t in texts)
+
+
 def test_toc_title_takes_precedence_over_heading(tmp_path):
     c = _chapter(
         "a.xhtml",
