@@ -31,7 +31,9 @@ class PlaybackService : Service() {
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val background = Executors.newSingleThreadExecutor()
-    @Volatile private var loading = false
+    private var loading = false          // main-thread only
+    private var generation = 0           // main-thread only; invalidates stale loads
+    @Volatile private var destroyed = false
 
     private val trackingListener: (TrackingState) -> Unit = { updateNotification() }
 
@@ -53,8 +55,9 @@ class PlaybackService : Service() {
                 updateNotification()
             }
             ACTION_RELOAD -> {
-                mainHandler.post { TandemSession.clear() }
-                ensureLoaded()
+                // On the main thread already: drop the old book, then force a fresh load.
+                TandemSession.clear()
+                ensureLoaded(force = true)
             }
             ACTION_STOP -> {
                 stopSelf()
@@ -65,21 +68,23 @@ class PlaybackService : Service() {
         return START_STICKY
     }
 
-    private fun ensureLoaded() {
-        if (TandemSession.hasBook() || loading) return
+    private fun ensureLoaded(force: Boolean = false) {
+        if (!force && (TandemSession.hasBook() || loading)) return
         val loader = BundleLoader(applicationContext)
         val dir = loader.currentBundleDir() ?: return
+        val gen = ++generation  // any earlier in-flight load is now stale
         loading = true
         background.execute {
             val book = try {
                 loader.load(dir)
             } catch (e: Exception) {
-                loading = false
+                mainHandler.post { if (gen == generation) loading = false }
                 return@execute
             }
             val matcher = PositionMatcher(book)
             mainHandler.post {
-                // A newer clear()/load may have happened; only publish if still needed.
+                // Drop the result if superseded (newer reload) or the service is gone.
+                if (destroyed || gen != generation) return@post
                 val controller = PlayerController(applicationContext, book, Settings(applicationContext))
                 TandemSession.loadBook(book, matcher, controller)
                 loading = false
@@ -125,6 +130,9 @@ class PlaybackService : Service() {
     }
 
     override fun onDestroy() {
+        destroyed = true
+        generation++  // invalidate any in-flight load's pending publish
+        mainHandler.removeCallbacksAndMessages(null)
         TandemSession.removeTrackingListener(trackingListener)
         background.shutdownNow()
         TandemSession.clear()

@@ -4,6 +4,9 @@ import android.content.Context
 import android.net.Uri
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
 import java.io.InputStream
 import java.util.zip.ZipInputStream
@@ -19,45 +22,74 @@ class BundleLoader(private val context: Context) {
     private val booksRoot: File
         get() = File(context.filesDir, "book").apply { mkdirs() }
 
+    private val stagingRoot: File
+        get() = File(context.filesDir, "book_import_tmp")
+
     /**
-     * Copy a picked .zip bundle into storage, replacing any existing book. Returns the
-     * loaded [Book], or throws [BundleException] if the archive is malformed/unsupported.
+     * Import a picked .zip bundle. Unzips and fully validates into a staging directory
+     * first, and only swaps it in on success — a failed import leaves the previously
+     * working book untouched. Returns the loaded [Book] or throws [BundleException].
      */
     fun importZip(uri: Uri): Book {
-        clearExisting()
-        context.contentResolver.openInputStream(uri)?.use { input ->
-            unzipInto(input, booksRoot)
-        } ?: throw BundleException("Could not open the selected file.")
-        val dir = locateBundleRoot(booksRoot)
-        return load(dir)
+        val staging = stagingRoot
+        staging.deleteRecursively()
+        staging.mkdirs()
+        try {
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                unzipInto(input, staging)
+            } ?: throw BundleException("Could not open the selected file.")
+            val stagedRoot = locateBundleRoot(staging)
+            load(stagedRoot)  // validate before touching the existing book
+
+            booksRoot.deleteRecursively()
+            if (!stagedRoot.renameTo(booksRoot)) {
+                stagedRoot.copyRecursively(booksRoot, overwrite = true)
+            }
+            return load(booksRoot)
+        } finally {
+            staging.deleteRecursively()
+        }
     }
 
     /** Load a bundle already present at [dir] (e.g. re-loading the imported book). */
     fun load(dir: File): Book {
-        val manifestFile = File(dir, "manifest.json")
-        if (!manifestFile.exists()) throw BundleException("manifest.json not found in bundle.")
+        val manifestText = readRequired(dir, "manifest.json")
 
-        val manifest = json.decodeFromString<Manifest>(manifestFile.readText())
-        if (manifest.schemaVersion != SUPPORTED_SCHEMA_VERSION) {
+        // Check the schema version before a full decode so a future/incompatible bundle
+        // fails with a clear message rather than a cryptic deserialization error.
+        val schemaVersion = try {
+            Json.parseToJsonElement(manifestText).jsonObject["schema_version"]?.jsonPrimitive?.int
+        } catch (e: Exception) {
+            throw BundleException("manifest.json is not valid JSON.")
+        }
+        if (schemaVersion != SUPPORTED_SCHEMA_VERSION) {
             throw BundleException(
-                "Unsupported bundle schema v${manifest.schemaVersion} " +
-                    "(this app supports v$SUPPORTED_SCHEMA_VERSION)."
+                "Unsupported bundle schema v$schemaVersion (this app supports v$SUPPORTED_SCHEMA_VERSION)."
             )
         }
-        val sentences = json.decodeFromString<List<Sentence>>(File(dir, "sentences.json").readText())
-        val timings = json.decodeFromString<List<Timing>>(File(dir, "timing.json").readText())
-        return Book.from(manifest, sentences, timings, dir)
+
+        return try {
+            val manifest = json.decodeFromString<Manifest>(manifestText)
+            val sentences = json.decodeFromString<List<Sentence>>(readRequired(dir, "sentences.json"))
+            val timings = json.decodeFromString<List<Timing>>(readRequired(dir, "timing.json"))
+            Book.from(manifest, sentences, timings, dir)
+        } catch (e: BundleException) {
+            throw e
+        } catch (e: Exception) {
+            throw BundleException("Bundle contains malformed JSON: ${e.message}")
+        }
+    }
+
+    private fun readRequired(dir: File, name: String): String {
+        val f = File(dir, name)
+        if (!f.exists()) throw BundleException("$name not found in bundle.")
+        return f.readText()
     }
 
     /** The directory of the currently imported book, if any. */
     fun currentBundleDir(): File? =
         booksRoot.takeIf { File(it, "manifest.json").exists() }
             ?: locateBundleRootOrNull(booksRoot)
-
-    private fun clearExisting() {
-        booksRoot.deleteRecursively()
-        booksRoot.mkdirs()
-    }
 
     private fun unzipInto(input: InputStream, destRoot: File) {
         ZipInputStream(input.buffered()).use { zis ->

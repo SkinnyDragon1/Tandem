@@ -22,7 +22,9 @@ data class MatchResult(val sentenceId: Int, val confidence: Float) {
 class PositionMatcher(book: Book, private val k: Int = 4) {
 
     private val tokenToSentence: IntArray            // global token index -> sentence id
-    private val ngramPositions: HashMap<String, MutableList<Int>>
+    // n-gram key -> sorted global token positions. IntArray values (not boxed lists) keep
+    // the index compact for large books.
+    private val ngramPositions: HashMap<String, IntArray>
 
     init {
         val tokens = ArrayList<String>()
@@ -34,12 +36,23 @@ class PositionMatcher(book: Book, private val k: Int = 4) {
             }
         }
         tokenToSentence = owner.toIntArray()
-        ngramPositions = HashMap(tokens.size * 2)
+
         val last = tokens.size - k
+        val counts = HashMap<String, Int>()
         var i = 0
         while (i <= last) {
+            counts.merge(ngramKey(tokens, i), 1) { a, b -> a + b }
+            i++
+        }
+        ngramPositions = HashMap(counts.size)
+        for ((key, c) in counts) ngramPositions[key] = IntArray(c)
+        val cursor = HashMap<String, Int>(counts.size)
+        i = 0
+        while (i <= last) {
             val key = ngramKey(tokens, i)
-            ngramPositions.getOrPut(key) { ArrayList(1) }.add(i)
+            val at = cursor[key] ?: 0
+            ngramPositions[key]!![at] = i
+            cursor[key] = at + 1
             i++
         }
     }

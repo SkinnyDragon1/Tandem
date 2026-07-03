@@ -83,7 +83,8 @@ def synthesize_chapter(
     for s in sentences:
         audio = _synthesize_sentence(voice, s.text, syn)
         if len(audio) < min_samples:
-            audio = np.zeros(min_samples, dtype=np.int16)
+            # Pad with trailing silence (never replace real speech) up to the floor.
+            audio = np.concatenate([audio, np.zeros(min_samples - len(audio), dtype=np.int16)])
         start_ms = int(cursor * 1000 / sr)
         cursor += len(audio)
         end_ms = int(cursor * 1000 / sr)

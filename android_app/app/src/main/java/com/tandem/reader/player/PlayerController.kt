@@ -2,7 +2,10 @@ package com.tandem.reader.player
 
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import com.tandem.reader.bundle.Book
 import com.tandem.reader.bundle.Timing
@@ -39,8 +42,18 @@ class PlayerController(
             .mapValues { (_, list) -> list.sortedBy { it.startMs } }
 
         orderedAudio.forEach { rel ->
-            player.addMediaItem(MediaItem.fromUri(Uri.fromFile(book.audioFile(rel))))
+            val file = book.audioFile(rel)
+            if (!file.exists()) {
+                Log.w(TAG, "Bundle audio file missing: $rel")
+            }
+            player.addMediaItem(MediaItem.fromUri(Uri.fromFile(file)))
         }
+        // Surface playback/decode/missing-file errors instead of failing silently.
+        player.addListener(object : Player.Listener {
+            override fun onPlayerError(error: PlaybackException) {
+                Log.e(TAG, "Playback error (${error.errorCodeName})", error)
+            }
+        })
         player.prepare()
     }
 
@@ -61,12 +74,15 @@ class PlayerController(
     }
 
     /**
-     * Resync only if [matchedSentenceId] is far enough from what's currently playing.
-     * Returns true if a seek happened. Small jitters within a paragraph are ignored.
+     * Resync to [matchedSentenceId]. When audio is already playing, small jitters within
+     * [Settings.minSentenceDistance] of the current sentence are ignored. When paused or
+     * not yet started, always seek so playback begins at the matched position. Returns
+     * true if a seek happened.
      */
     fun maybeResync(matchedSentenceId: Int): Boolean {
         val current = currentSentenceId()
-        if (current != null &&
+        if (player.isPlaying &&
+            current != null &&
             kotlin.math.abs(matchedSentenceId - current) < settings.minSentenceDistance
         ) {
             return false
@@ -98,5 +114,9 @@ class PlayerController(
 
     fun release() {
         player.release()
+    }
+
+    private companion object {
+        const val TAG = "TandemPlayer"
     }
 }
