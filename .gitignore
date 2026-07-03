@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+pc_pipeline/.venv/
+.pytest_cache/
+
+# Piper voice models (large binaries, downloaded on demand)
+pc_pipeline/models/*.onnx
+pc_pipeline/models/*.onnx.json
+
+# Generated bundles / work dirs
+*.tandem/
+.work/
+out/
+
+# Android
+android_app/.gradle/
+android_app/build/
+android_app/app/build/
+android_app/local.properties
+android_app/.idea/
+*.apk
+
+# User-provided (copyrighted) test EPUBs at repo root — keep local, do not commit
+/samples/*.epub
