@@ -104,6 +104,13 @@ uv run tandem bundle ./work --zip             # -> work/manifest.json (+ work.zi
 Chapters that yield no usable text, and any sections where forced alignment reports
 low confidence, are **flagged in the run log** rather than failing silently.
 
+### Pipeline setup notes
+
+- `uv sync` pins the Torch stack to 2.5.1 (newer `torchaudio` drops
+  `AudioMetaData`, which WhisperX/pyannote still import).
+- First `build` run downloads the Piper voice (~63 MB, into `pc_pipeline/models/`)
+  and the WhisperX wav2vec2 alignment model (~360 MB, cached in `~/.cache`).
+
 ## Android app — usage
 
 Sideloaded APK (no Play Store for v1). Requires enabling the app's Accessibility
@@ -114,6 +121,10 @@ cd android_app
 ./gradlew assembleDebug              # build app/build/outputs/apk/debug/app-debug.apk
 adb install -r app-debug.apk
 ```
+
+Build requires a **full JDK 17+ that includes `jlink`** (a JRE alone fails the
+`androidJdkImage` transform), the Android SDK (platform 34, build-tools 34), and a
+`local.properties` with `sdk.dir=/path/to/android-sdk`.
 
 Then, on device: **Settings → Accessibility → Tandem → On**, open the app, import a
 `.tandem` bundle, start playback, and open your reader app. A subtle indicator shows
