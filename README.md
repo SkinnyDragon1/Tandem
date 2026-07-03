@@ -65,10 +65,13 @@ A bundle is a folder (optionally zipped as `.tandem`) with this layout:
 ├── sentences.json     # ordered sentence index: id, chapter, char range, text
 ├── timing.json        # sentence_id → { audio, start_ms, end_ms } + alignment flags
 └── audio/
-    ├── chapter_0001.opus
-    ├── chapter_0002.opus
+    ├── chapter_0001.wav
+    ├── chapter_0002.wav
     └── …
 ```
+
+> v1 ships one WAV per chapter (`manifest.audio.format = "wav"`). Opus compression to
+> shrink bundle size is a planned optimization; ExoPlayer plays either.
 
 The exact JSON schemas are defined in `pc_pipeline/tandem_pipeline/models.py` and
 documented in [`docs/bundle-format.md`](docs/bundle-format.md). Both halves depend on

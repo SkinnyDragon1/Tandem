@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Tandem</string>
+    <string name="settings_title">Tandem Settings</string>
+    <string name="accessibility_label">Tandem position tracking</string>
+    <string name="accessibility_description">Reads the visible text of your reader app to keep the audiobook in sync with where you are scrolled. Text is used only on-device to match against the current book; nothing is sent anywhere.</string>
+
+    <string name="import_bundle">Import bundle…</string>
+    <string name="no_book">No book imported yet.</string>
+    <string name="play">Play</string>
+    <string name="pause">Pause</string>
+    <string name="open_accessibility">Enable accessibility service</string>
+    <string name="open_settings">Settings</string>
+    <string name="tracking_on">Tracking your position</string>
+    <string name="tracking_off">Not tracking (no match)</string>
+    <string name="tracking_idle">Idle</string>
+
+    <string name="settings_packages">Monitored reader apps (comma-separated package names)</string>
+    <string name="settings_settle">Settle delay (ms)</string>
+    <string name="settings_distance">Min sentence distance to resync</string>
+    <string name="settings_confidence">Match confidence threshold (0–100)</string>
+    <string name="save">Save</string>
+</resources>

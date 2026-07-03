@@ -79,8 +79,11 @@ def synthesize_chapter(
     spans: list[SentenceSpan] = []
     cursor = 0  # samples written so far
 
+    min_samples = int(sr * 0.2)  # floor so a silent/empty synthesis still has a usable span
     for s in sentences:
         audio = _synthesize_sentence(voice, s.text, syn)
+        if len(audio) < min_samples:
+            audio = np.zeros(min_samples, dtype=np.int16)
         start_ms = int(cursor * 1000 / sr)
         cursor += len(audio)
         end_ms = int(cursor * 1000 / sr)

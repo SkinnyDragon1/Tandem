@@ -62,12 +62,14 @@ def _refine_chapter(
             align_model.device,
             return_char_alignments=False,
         )
-        for i, seg in enumerate(result.get("segments", [])):
-            words = seg.get("words", [])
-            starts = [w["start"] for w in words if w.get("start") is not None]
-            ends = [w["end"] for w in words if w.get("end") is not None]
-            if starts and ends:
-                refined_by_index[i] = (min(starts), max(ends))
+        aligned = result.get("segments", [])
+        # Only trust positional segment<->span correspondence when it is 1:1; whisperx can
+        # drop a segment it cannot align, which would shift every following sentence.
+        if len(aligned) == len(chapter.spans):
+            for i, seg in enumerate(aligned):
+                words = [w for w in seg.get("words", []) if w.get("start") is not None and w.get("end") is not None]
+                if words:
+                    refined_by_index[i] = (min(w["start"] for w in words), max(w["end"] for w in words))
     except Exception:
         # Whole-chapter alignment failed; every sentence falls back below.
         refined_by_index = {}
@@ -112,9 +114,10 @@ def align_chapters(
         timings = _refine_chapter(chapter, sentences_by_id, align_model)
         low = [t.sentence_id for t in timings if t.confidence == "low"]
         if low:
+            shown = ", ".join(str(i) for i in low[:15]) + ("…" if len(low) > 15 else "")
             warnings_out.append(
                 f"chapter {chapter.chapter_index}: {len(low)} sentences had "
-                f"low-confidence alignment (ids {low[0]}-{low[-1]})"
+                f"low-confidence alignment (ids {shown})"
             )
         all_timings.extend(timings)
 
